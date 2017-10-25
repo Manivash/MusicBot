@@ -4,7 +4,9 @@ var bodyParser = require('body-parser');
 var request = require('request');
 var path = require('path');
 const LastFM = require('last-fm')
-const lastfm = new LastFM('////YOUR LAST_FM API KEY/////', { userAgent: 'DemoApp/1.0.0 (////DOMAIN NAME OF THE SERVER////)' })
+const lastfm = new LastFM('////YOUR LAST_FM API KEY/////', {
+  userAgent: 'DemoApp/1.0.0 (////DOMAIN NAME OF THE SERVER////)'
+})
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
@@ -25,107 +27,106 @@ app.set('views', __dirname + '/views');
 app.set('view engine', 'ejs');
 
 app.get('/webhook/', function(request, response) {
-    if (request.query['hub.verify_token'] == FACEBOOK_VERIFY_TOKEN) {
-      response.send(request.query['hub.challenge'])
+  if (request.query['hub.verify_token'] == FACEBOOK_VERIFY_TOKEN) {
+    response.send(request.query['hub.challenge'])
+  }
+  res.send('Error, wrong token')
+});
+
+app.get('/privacy', function(req, res) {
+  res.sendFile(path.join(__dirname, 'views', 'pages', 'privacy.html'));
+});
+
+app.post('/webhook', function(req, res) {
+  if (req.body.object === 'page') {
+    if (req.body.entry) {
+      req.body.entry.forEach(function(entry) {
+        if (entry.messaging) {
+          entry.messaging.forEach(function(messagingObject) {
+            var senderId = messagingObject.sender.id;
+            if (messagingObject.message) {
+              var musicName = messagingObject.message.text;
+              fetchData(senderId, musicName);
+            } else if (messagingObject.postback) {
+              console.log('Recieved postback');
+
+            }
+          });
+        } else {
+          console.log('no message key found');
+        }
+      });
+    } else {
+      console.log('no entry key found');
     }
-    res.send('Error, wrong token')
+  } else {
+
+  }
+  res.status(200).send();
 });
 
-app.get('/privacy',function(req,res){
-res.sendFile(path.join(__dirname,'views','pages','privacy.html'));
-});
-
-app.post('/webhook',function(req, res){
-     if(req.body.object === 'page'){
-       if(req.body.entry){
-         req.body.entry.forEach(function(entry){
-           if(entry.messaging){
-             entry.messaging.forEach(function(messagingObject){
-               var senderId = messagingObject.sender.id;
-               if(messagingObject.message){
-                 var musicName = messagingObject.message.text;
-                 fetchData(senderId, musicName);
-               }else if(messagingObject.postback){
-							console.log('Recieved postback');
-
-						}
-             });
-           }else{
-					console.log('no message key found');
-				 }
-         });
-       }else{
-    			console.log('no entry key found');
-		   }
-     }else{
-
-     }
-     res.status(200).send();
-});
-
-function sendMessageToUser(senderId, message){
+function sendMessageToUser(senderId, message) {
   request({
     url: FACEBOOK_SEND_MESSAGE_URL,
     method: 'POST',
-    json : {
-            "recipient":{
+    json: {
+      "recipient": {
         "id": senderId
       },
-      "message":{
+      "message": {
         "text": message
       }
     }
 
-  },function(error, response, body){
-      if (error) {
-       console.log('Error sending UIMESSAGE to User ' + JSON.stringify(error));
-     } else if (response.body.error) {
-       console.log('Error sending UImessage' + JSON.stringify(response.body.error));
-     }
+  }, function(error, response, body) {
+    if (error) {
+      console.log('Error sending UIMESSAGE to User ' + JSON.stringify(error));
+    } else if (response.body.error) {
+      console.log('Error sending UImessage' + JSON.stringify(response.body.error));
+    }
   });
 }
 
-function fetchData(senderId, musicName){
+function fetchData(senderId, musicName) {
   showTypingIndicatorToUser(senderId, true);
   var opts = {
     q: musicName
   };
-      lastfm.trackSearch(opts , (err, data) => {
-        showTypingIndicatorToUser(senderId, false);
-      if (err) {
-        console.error(err)
-      }else{
-        fetchingData(senderId, data);
-      }
-    });
+  lastfm.trackSearch(opts, (err, data) => {
+    showTypingIndicatorToUser(senderId, false);
+    if (err) {
+      console.error(err)
+    } else {
+      fetchingData(senderId, data);
+    }
+  });
 }
 
-function fetchingData(senderId, body){
-  var elements=[];
-  if(body.result){
-    if(body.result.length > 0){
+function fetchingData(senderId, body) {
+  var elements = [];
+  if (body.result) {
+    if (body.result.length > 0) {
       console.log('under result');
       var lengthOfResult = body.result.length > 10 ? 10 : body.result.length;
-      for(i=0 ; i<lengthOfResult ; i++){
+      for (i = 0; i < lengthOfResult; i++) {
         elements.push(formingElements(body.result[i]));
       }
       sendTemplateResponse(senderId, elements);
-    }else{
+    } else {
       sendMessageToUser(senderId, 'Couldn\'t find info');
     }
 
   }
 }
 
-function formingElements(result){
+function formingElements(result) {
   var musicName = result.name;
-	var artistName = result.artistName;
+  var artistName = result.artistName;
   var posterPath;
 
-  if(result.images.length == 0 || result.images == undefined){
+  if (result.images.length == 0 || result.images == undefined) {
     posterPath = 'https://images.pexels.com/photos/3104/black-and-white-music-headphones-life.jpg?h=350&auto=compress&cs=tinysrgb';
-  }
-  else{
+  } else {
     posterPath = result.images[2];
   }
 
@@ -134,71 +135,68 @@ function formingElements(result){
   var musicNameUrl = musicNameArray.join('+');
   var artistNameUrl = artistNameArray.join('+');
 
-	return {
-								 title : musicName,
-								 subtitle : artistName,
-								 image_url : posterPath,
-								 buttons:[
-									  {
-										"type":"web_url",
-										"url":LAST_FM_URL+artistNameUrl+'/_/'+musicNameUrl,
-										"title":"More Details"
-									  }
-                                    ]
-							 }
+  return {
+    title: musicName,
+    subtitle: artistName,
+    image_url: posterPath,
+    buttons: [{
+      "type": "web_url",
+      "url": LAST_FM_URL + artistNameUrl + '/_/' + musicNameUrl,
+      "title": "More Details"
+    }]
+  }
 }
 
-function sendTemplateResponse(senderId, elementList){
+function sendTemplateResponse(senderId, elementList) {
   request({
-		url : FACEBOOK_SEND_MESSAGE_URL,
-		method : 'POST',
-		json : {
-				recipient: {
-                    id: senderId
-                      },
-                message: {
-                    attachment: {
-						 type: 'template',
-                         payload: {
-							 template_type: 'generic',
-                             elements:
-							     elementList
+    url: FACEBOOK_SEND_MESSAGE_URL,
+    method: 'POST',
+    json: {
+      recipient: {
+        id: senderId
+      },
+      message: {
+        attachment: {
+          type: 'template',
+          payload: {
+            template_type: 'generic',
+            elements: elementList
 
 
-						}
-					}
-                }
+          }
+        }
+      }
 
-		    }
-	    },function(error,response,body){
-			if(error){
-			console.log('Error sending UIMESSAGE to User '+error.toString());
-		}else if(response.body.error){
-			console.log('Error sending UImessage under sendTemplateResponse'+JSON.stringify(response.body.error));
-		}
-		//ignore
-		});
+    }
+  }, function(error, response, body) {
+    if (error) {
+      console.log('Error sending UIMESSAGE to User ' + error.toString());
+    } else if (response.body.error) {
+      console.log('Error sending UImessage under sendTemplateResponse' + JSON.stringify(response.body.error));
+    }
+    //ignore
+  });
 }
 
-function showTypingIndicatorToUser(senderId,isTyping){
-	var senderAction = isTyping ? 'typing_on' : 'typing_off';
-	request({
-		url:FACEBOOK_SEND_MESSAGE_URL,
-		method:'POST',
-		json:{
-				recipient: {
-              id: senderId
-                         },
-             sender_action: senderAction
-		}
+function showTypingIndicatorToUser(senderId, isTyping) {
+  var senderAction = isTyping ? 'typing_on' : 'typing_off';
+  request({
+    url: FACEBOOK_SEND_MESSAGE_URL,
+    method: 'POST',
+    json: {
+      recipient: {
+        id: senderId
+      },
+      sender_action: senderAction
+    }
 
-	},function(error,response,body){
-		if(error){
-			console.log('sending Typing indicator to user '+error);
-		}else if(response.body.error){
-			console.log('Error sending typing indicator'+response.body.error);
-		}
-	});
+  }, function(error, response, body) {
+    if (error) {
+      console.log('sending Typing indicator to user ' + error);
+    } else if (response.body.error) {
+      console.log('Error sending typing indicator' + response.body.error);
+    }
+  });
 
 }
 
